@@ -16,9 +16,10 @@ from adafruit_matrixportal.matrix import Matrix
 from adafruit_matrixportal.network import Network
 from board import NEOPIXEL
 
-ERROR_THRESHOLD = 3  # before resetting the microcontroller
-REFRESH_RATE = 15    # time (s) between refreshing the counts
-SYNC_RATE = 60       # misalignment time (s) before refreshing the current time
+ERROR_THRESHOLD   = 3     # before resetting the microcontroller
+REFRESH_RATE      = 15    # time (s) between refreshing the counts
+TIME_SYNC_RATE    = 3600  # query the network time once per hour 
+WEATHER_SYNC_RATE = 600   # check weather every 10 mins
 
 MONTH = ['','Jan','Feb','Mar','Apr','May','Jun',
     'Jul','Aug','Sep','Oct','Nov','Dec']
@@ -31,23 +32,15 @@ GOLD   = 0xDD8000
 BLACK  = 0x000000
 
 FONT = {
-#    '4x6': bitmap_font.load_font("fonts/4x6.bdf"),
     '5x7': bitmap_font.load_font("fonts/5x7.bdf"),
     '6x10': bitmap_font.load_font("fonts/6x10.bdf"),
-#    'helvR12': bitmap_font.load_font("fonts/helvR12.bdf"),
-#    'helvR10': bitmap_font.load_font("fonts/helvR10.bdf"),
-#    'helvB12': bitmap_font.load_font("fonts/helvB12.bdf"),
     'helvB10': bitmap_font.load_font("fonts/helvB10.bdf"),
     'thumb': bitmap_font.load_font("fonts/tom-thumb.bdf"),
- #   'sq6b': bitmap_font.load_font("fonts/u8g2_squeezed_bold_6.bdf"),
- #   'sq7b': bitmap_font.load_font("fonts/u8g2_squeezed_bold_7.bdf"),
- #   'sq6r': bitmap_font.load_font("fonts/u8g2_squeezed_regular_6.bdf"),
- #   'sq7r': bitmap_font.load_font("fonts/u8g2_squeezed_regular_7.bdf"),
 }
 
 ICONS_FILE = displayio.OnDiskBitmap('weather-icons.bmp')
 ICON_DIM = (16, 16) # width x height
-ICON_MAP = {  # converts the openweathermap code to the icon location
+ICON_MAP = {  # map the openweathermap code to the icon location
     '01d': (0, 0), '01n': (1, 0),
     '02d': (0, 1), '02n': (1, 1),
     '03d': (0, 2), '03n': (1, 2),
@@ -74,7 +67,6 @@ times_group = displayio.Group(x=0, y=26)
 weather_group = displayio.Group(x=1, y=48)
 
 clock = {
-#    'date': label.Label(FONT['thumb'], color=WHITE, x=4, y=0, text="Jan 01"),
     'time': label.Label(FONT['helvB10'], color=WHITE, x=3, y=4, text="00:00"),
 }
 
@@ -122,8 +114,6 @@ root_group.append(weather_group);
 
 display.show(root_group)
 
-errors = 0
-time_sync = None
 
 icon_code = '01n'
 (col, row) = ICON_MAP[icon_code]
@@ -142,16 +132,17 @@ def get_sprite(icon):
     return SPRITE
     
 
-
+errors = 0
+time_refresh = None
+weather_refresh = None
 while True:
     try:
-        if time_sync == None or time.monotonic() > time_sync + SYNC_RATE:
+        if time_refresh == None or time.monotonic() - time_refresh > TIME_SYNC_RATE:
             network.get_local_time()
-            time_sync = time.monotonic()
+            time_refresh = time.monotonic()
 
-        icon, temp = openweather.weather(network, secrets.secrets['coords'])
-        weather['icon'].append(get_sprite(icon))
-        weather['temp'].text = str(temp)
+        now = datetime.now()
+        clock['time'].text = "%02d:%02d" % (now.hour, now.minute)
 
         arrivals = mta_train.arrivals(network, 'Forest Av', route='M', dir='N')
         times['M'].text = "\n".join(arrivals)
@@ -162,10 +153,11 @@ while True:
         stops = mta_bus.stops_away(network, 'GATES AV/GRANDVIEW AV', dir=0)
         times['B'].text = "\n".join(stops)
 
-	now = datetime.now()
-        clock['time'].text = "%02d:%02d" % (now.hour, now.minute)
-#        clock['date'].text = "%s %02d" % (MONTH[now.month], now.day)
-
+        if weather_refresh == None or time.monotonic() - weather_refresh > WEATHER_SYNC_RATE:
+            weather_refresh = time.monotonic()
+	    icon, temp = openweather.weather(network, secrets.secrets['coords'])
+            weather['icon'].append(get_sprite(icon))
+            weather['temp'].text = str(temp)
 
     except (ValueError, TimeoutError, RuntimeError) as e: # , MemoryError) as e:
         print("\nError\n", e)
