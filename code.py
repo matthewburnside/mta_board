@@ -1,4 +1,3 @@
-
 import adafruit_display_text.label
 import displayio
 import gc
@@ -32,18 +31,18 @@ GOLD   = 0xDD8000
 BLACK  = 0x000000
 
 FONT = {
-    '4x6': bitmap_font.load_font("fonts/4x6.bdf"),
+#    '4x6': bitmap_font.load_font("fonts/4x6.bdf"),
     '5x7': bitmap_font.load_font("fonts/5x7.bdf"),
     '6x10': bitmap_font.load_font("fonts/6x10.bdf"),
-    'helvR12': bitmap_font.load_font("fonts/helvR12.bdf"),
-    'helvR10': bitmap_font.load_font("fonts/helvR10.bdf"),
-    'helvB12': bitmap_font.load_font("fonts/helvB12.bdf"),
+#    'helvR12': bitmap_font.load_font("fonts/helvR12.bdf"),
+#    'helvR10': bitmap_font.load_font("fonts/helvR10.bdf"),
+#    'helvB12': bitmap_font.load_font("fonts/helvB12.bdf"),
     'helvB10': bitmap_font.load_font("fonts/helvB10.bdf"),
     'thumb': bitmap_font.load_font("fonts/tom-thumb.bdf"),
-    'sq6b': bitmap_font.load_font("fonts/u8g2_squeezed_bold_6.bdf"),
-    'sq7b': bitmap_font.load_font("fonts/u8g2_squeezed_bold_7.bdf"),
-    'sq6r': bitmap_font.load_font("fonts/u8g2_squeezed_regular_6.bdf"),
-    'sq7r': bitmap_font.load_font("fonts/u8g2_squeezed_regular_7.bdf"),
+ #   'sq6b': bitmap_font.load_font("fonts/u8g2_squeezed_bold_6.bdf"),
+ #   'sq7b': bitmap_font.load_font("fonts/u8g2_squeezed_bold_7.bdf"),
+ #   'sq6r': bitmap_font.load_font("fonts/u8g2_squeezed_regular_6.bdf"),
+ #   'sq7r': bitmap_font.load_font("fonts/u8g2_squeezed_regular_7.bdf"),
 }
 
 ICONS_FILE = displayio.OnDiskBitmap('weather-icons.bmp')
