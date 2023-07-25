@@ -90,13 +90,12 @@ times = {
         text=" "*9, line_spacing=1.4),
 }
 
-
 weather = {
     'icon': displayio.Group(x=0, y=0),
     'temp': label.Label(FONT['helvB10'], color=WHITE, x=17, y=8, text="00"),
     'degree': label.Label(FONT['6x10'], color=WHITE, x=27, y=7, text='°'),
 }
-
+weather['icon'].append(get_sprite('01n'))
 
 for item in headers:
     headers_group.append(item)
@@ -114,23 +113,13 @@ root_group.append(weather_group);
 
 display.show(root_group)
 
-
-icon_code = '01n'
-(col, row) = ICON_MAP[icon_code]
-if len(weather['icon']) > 0:
-    weather['icon'].pop()
-
-SPRITE[0] = (row * 2) + col
-weather['icon'].append(SPRITE)
-
 def get_sprite(icon):
     icon = '01d'
     (col, row) = ICON_MAP[icon]
     if len(weather['icon']) > 0:
         weather['icon'].pop()
     SPRITE[0] = (row * 2) + col
-    return SPRITE
-    
+    return SPRITE    
 
 errors = 0
 time_refresh = None
