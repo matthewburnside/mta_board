@@ -1,11 +1,9 @@
+import traceback
+
+
 import adafruit_display_text.label
 import displayio
-import gc
 import microcontroller
-import mta_bus
-import mta_train
-import openweather
-import secrets
 import time
 from adafruit_bitmap_font import bitmap_font
 from adafruit_datetime import datetime
@@ -15,11 +13,13 @@ from adafruit_display_shapes import line
 from adafruit_matrixportal.matrix import Matrix
 from adafruit_matrixportal.network import Network
 from board import NEOPIXEL
+from secrets import secrets
 
 ERROR_THRESHOLD   = 3     # before resetting the microcontroller
 REFRESH_RATE      = 15    # time (s) between refreshing the counts
 TIME_SYNC_RATE    = 3600  # query the network time once per hour 
 WEATHER_SYNC_RATE = 600   # check weather every 10 mins
+MAX_ENTRIES       = 3     # count of arrivals to show
 
 MONTH = ['','Jan','Feb','Mar','Apr','May','Jun',
     'Jul','Aug','Sep','Oct','Nov','Dec']
@@ -38,6 +38,75 @@ FONT = {
     'thumb': bitmap_font.load_font("fonts/tom-thumb.bdf"),
 }
 
+matrix           = Matrix()
+display          = matrix.display
+display.rotation = 270
+network          = Network(status_neopixel=NEOPIXEL, debug=False)
+
+
+### Trains setup
+
+TRAIN_API = 'https://api.wheresthefuckingtrain.com/by-id/'
+STATION = {
+    'Forest Av': '934a',
+    'Myrtle - Wyckoff Avs': 'f145'
+}
+
+def train_api(station, route, dir):
+    query = '%s%s'% (TRAIN_API, STATION[station])
+    schedule = network.fetch_data(query, json_path=(["data"],))
+    arrivals = []
+    now = datetime.now()
+
+    for entry in schedule:
+        trains = entry[dir] # only grab the trains in the dir we want
+        trains = [t for t in trains if t['route'] == route] # only our line
+        for train in trains:
+            arrivals.append(in_mins(now, train['time']))
+
+    arrivals.sort()
+    arrivals = ["Ar" if i < 1 else str(i) for i in arrivals]
+    print("%s %s %s: %s" % (station, route, dir, arrivals))
+    return arrivals[:MAX_ENTRIES]
+
+def in_mins(now, date_str):
+    train_date = datetime.fromisoformat(date_str).replace(tzinfo=None)
+    return round((train_date-now).total_seconds()/60.0)
+
+
+
+### Buses setup
+
+BUS_API = 'https://bustime.mta.info/api/siri/stop-monitoring.json' \
+    '?key=%s&MonitoringRef=%s&DirectionRef=%s&MaximumStopVisits=%s'
+
+STOP = {
+    'GATES AV/GRANDVIEW AV': '504111',
+}
+
+def bus_api(stop, dir):
+    query = BUS_API % (secrets['bustime_key'], STOP[stop], dir, MAX_ENTRIES)
+    schedule = network.fetch_data(query, json_path=(["Siri"],))
+    buses = schedule['ServiceDelivery']['StopMonitoringDelivery'][0]
+    journeys = buses['MonitoredStopVisit']
+
+    stops = []
+    for j in journeys:
+        bus = j['MonitoredVehicleJourney']['MonitoredCall']['Extensions']
+        stops.append(bus['Distances']['StopsFromCall'])
+
+    print("%s %s %s" % (stop, dir, stops))
+    stops.sort()
+    stops = [str(i) for i in stops]
+    return stops[:MAX_ENTRIES]
+
+
+
+### Weather setup
+
+WEATHER_API = 'https://api.openweathermap.org/data/2.5/weather?' \
+    'lat=%s&lon=%s&appid=%s&units=imperial'
+
 ICONS_FILE = displayio.OnDiskBitmap('weather-icons.bmp')
 ICON_DIM = (16, 16) # width x height
 ICON_MAP = {  # map the openweathermap code to the icon location
@@ -51,27 +120,33 @@ ICON_MAP = {  # map the openweathermap code to the icon location
     '13d': (0, 7), '13n': (1, 7),
     '50d': (0, 8), '50n': (1, 8),
 }
-
 SPRITE = displayio.TileGrid(ICONS_FILE, pixel_shader=ICONS_FILE.pixel_shader,
     tile_width = ICON_DIM[0], tile_height = ICON_DIM[1])
 
 def get_sprite(icon):
-    icon = '01d'
     (col, row) = ICON_MAP[icon]
     if len(weather['icon']) > 0:
         weather['icon'].pop()
     SPRITE[0] = (row * 2) + col
     return SPRITE    
 
-matrix = Matrix()
-display = matrix.display
-display.rotation = 270
-network = Network(status_neopixel=NEOPIXEL, debug=False)
+def weather_api(coords):
+    print("weather")
+    query = WEATHER_API % (coords['lat'], coords['lon'], secrets['weather_key'])
+    print(query)
+    resp = network.fetch_data(query, json_path=([]))
+    icon = resp['weather'][0]['icon']
+    temp = round(resp['main']['temp'])
+    print("icon: %s, temp: %s" % (icon, temp))
+    return (icon, temp)
 
-root_group = displayio.Group()
-clock_group = displayio.Group(x=0, y=0)
-headers_group = displayio.Group(x=4, y=12)
-times_group = displayio.Group(x=0, y=26)
+
+### Graphics setup
+
+root_group    = displayio.Group()
+clock_group   = displayio.Group(x=0, y=1)
+headers_group = displayio.Group(x=4, y=13)
+times_group   = displayio.Group(x=0, y=26)
 weather_group = displayio.Group(x=1, y=48)
 
 clock = {
@@ -82,26 +157,27 @@ headers = [
     circle.Circle(fill=ORANGE, x0=1, y0=4, r=4),
     circle.Circle(fill=GREY, x0=11, y0=4, r=4),
     circle.Circle(fill=BLUE, x0=22, y0=4, r=4),
-    label.Label(FONT['5x7'], color=BLACK, x=-1, y=4, text="M"),
-    label.Label(FONT['5x7'], color=BLACK, x=10, y=4, text="L"),
-    label.Label(FONT['thumb'], color=BLACK, x=19, y=5, text="13"),
-    line.Line(x0=6, y0=10, x1=6, y1=35, color=GREY),
-    line.Line(x0=17, y0=10, x1=17, y1=35, color=GREY),
+    label.Label(FONT['thumb'], color=BLACK, x=0, y=5, text="M"),
+    label.Label(FONT['thumb'], color=BLACK, x=10, y=5, text="L"),
+    label.Label(FONT['thumb'], color=BLACK, x=20, y=5, text="1"),
+    label.Label(FONT['thumb'], color=BLACK, x=23, y=5, text="3"),
+    line.Line(x0=6, y0=10, x1=6, y1=32, color=GREY),
+    line.Line(x0=17, y0=10, x1=17, y1=32, color=GREY),
 ]
 
 times = {
     'M': label.Label(FONT['5x7'], color=GOLD, x=0, y=0, \
-        text=" "*9, line_spacing=1.4),
-    'L': label.Label(FONT['5x7'], color=GOLD, x=11, y=0, \
-        text=" "*9, line_spacing=1.4),
+        text=" "*9, line_spacing=1.2),
+    'L': label.Label(FONT['5x7'], color=GOLD, x=12, y=0, \
+        text=" "*9, line_spacing=1.2),
     'B': label.Label(FONT['5x7'], color=GOLD, x=23, y=0, \
-        text=" "*9, line_spacing=1.4),
+        text=" "*9, line_spacing=1.2),
 }
 
 weather = {
     'icon': displayio.Group(x=0, y=0),
-    'temp': label.Label(FONT['helvB10'], color=WHITE, x=17, y=8, text="00"),
-    'degree': label.Label(FONT['6x10'], color=WHITE, x=27, y=7, text='°'),
+    'temp': label.Label(FONT['helvB10'], color=WHITE, x=17, y=7, text="00"),
+    'degree': label.Label(FONT['6x10'], color=WHITE, x=27, y=6, text='°'),
 }
 weather['icon'].append(get_sprite('01n'))
 
@@ -134,24 +210,26 @@ while True:
         now = datetime.now()
         clock['time'].text = "%02d:%02d" % (now.hour, now.minute)
 
-        arrivals = mta_train.arrivals(network, 'Forest Av', route='M', dir='N')
-        times['M'].text = "\n".join(arrivals)
+        m_train = train_api('Forest Av', route='M', dir='N')
+        times['M'].text = "\n".join(m_train)
 
-        arrivals = mta_train.arrivals(network, 'Myrtle - Wyckoff Avs', route='L', dir='N')
-        times['L'].text = "\n".join(arrivals)
+        l_train = train_api('Myrtle - Wyckoff Avs', route='L', dir='N')
+        times['L'].text = "\n".join(l_train)
 
-        stops = mta_bus.stops_away(network, 'GATES AV/GRANDVIEW AV', dir=0)
+        stops = bus_api('GATES AV/GRANDVIEW AV', dir=0)
         times['B'].text = "\n".join(stops)
 
         if weather_refresh == None or time.monotonic() - weather_refresh > WEATHER_SYNC_RATE:
-            weather_refresh = time.monotonic()
-	    icon, temp = openweather.weather(network, secrets.secrets['coords'])
+	    icon, temp = weather_api(secrets['coords'])
+            weather['icon'].pop()
             weather['icon'].append(get_sprite(icon))
             weather['temp'].text = str(temp)
+            weather_refresh = time.monotonic()
 
-    except (ValueError, TimeoutError, RuntimeError) as e: # , MemoryError) as e:
-        print("\nError\n", e)
-        errors = errors + 1
+    except Exception as e:
+        print("\nError: ", e)
+        traceback.print_exception(e)
+        errors += 1
         if errors > ERROR_THRESHOLD:
             microcontroller.reset()
 
