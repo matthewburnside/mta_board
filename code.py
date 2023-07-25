@@ -55,6 +55,14 @@ ICON_MAP = {  # map the openweathermap code to the icon location
 SPRITE = displayio.TileGrid(ICONS_FILE, pixel_shader=ICONS_FILE.pixel_shader,
     tile_width = ICON_DIM[0], tile_height = ICON_DIM[1])
 
+def get_sprite(icon):
+    icon = '01d'
+    (col, row) = ICON_MAP[icon]
+    if len(weather['icon']) > 0:
+        weather['icon'].pop()
+    SPRITE[0] = (row * 2) + col
+    return SPRITE    
+
 matrix = Matrix()
 display = matrix.display
 display.rotation = 270
@@ -113,13 +121,6 @@ root_group.append(weather_group);
 
 display.show(root_group)
 
-def get_sprite(icon):
-    icon = '01d'
-    (col, row) = ICON_MAP[icon]
-    if len(weather['icon']) > 0:
-        weather['icon'].pop()
-    SPRITE[0] = (row * 2) + col
-    return SPRITE    
 
 errors = 0
 time_refresh = None
