@@ -15,7 +15,7 @@ from secrets import secrets
 ERROR_THRESHOLD    = 3     # before resetting the microcontroller
 REFRESH_RATE       = 10    # time (s) between refreshing the counts
 TRAIN_LIMIT        = 0     # no rate limit on the train API
-BUS_LIMIT          = 31    # refresh the bus every 31s (there's a 30s rate limit)
+BUS_LIMIT          = 45    # refresh the bus every 31s (there's a 30s rate limit)
 TIME_LIMIT         = 600   # resync the clock every 10 mins
 WEATHER_LIMIT      = 600   # refresh the weather every 10 mins
 MAX_ENTRIES        = 3     # count of arrivals to show
