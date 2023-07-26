@@ -31,9 +31,9 @@ GOLD   = 0xDD8000
 BLACK  = 0x000000
 
 FONT = {
-    '5x7': bitmap_font.load_font("fonts/5x7.bdf"),
+    '5x7':     bitmap_font.load_font("fonts/5x7.bdf"),
     'helvB10': bitmap_font.load_font("fonts/helvB10.bdf"),
-    'thumb': bitmap_font.load_font("fonts/tom-thumb.bdf"),
+    'thumb':   bitmap_font.load_font("fonts/tom-thumb.bdf"),
 }
 
 matrix           = Matrix()
@@ -56,7 +56,7 @@ def train_api(station, route, dir):
     arrivals = []
     now = datetime.now()
     for entry in schedule:
-        trains = entry[dir] # only grab the trains in the dir we want
+        trains = entry[dir] # only trains in our dir
         trains = [t for t in trains if t['route'] == route] # only our line
         for train in trains:
             arrivals.append(in_mins(now, train['time']))
@@ -73,8 +73,13 @@ def in_mins(now, date_str):
 
 ### Buses API setup
 
-BUS_API = 'https://bustime.mta.info/api/siri/stop-monitoring.json' \
-    '?key=%s&MonitoringRef=%s&DirectionRef=%s&MaximumStopVisits=%s'
+BUS_API = 'https://bustime.mta.info/api/siri/stop-monitoring.json?' \
+    'key=%s&' \
+    'MonitoringRef=%s&' \
+    'DirectionRef=%s&' \
+    'MaximumStopVisits=%s&' \
+    'StopMonitoringDetailLevel=minimum'
+
 STOP = {
     'GATES AV/GRANDVIEW AV': '504111',
 }
@@ -101,11 +106,14 @@ def bus_api(stop, dir):
 ### Weather API setup
 
 WEATHER_API = 'https://api.openweathermap.org/data/2.5/weather?' \
-    'lat=%s&lon=%s&appid=%s&units=imperial&StopMonitoringDetailLevel=minimum'
+    'lat=%s&' \
+    'lon=%s&' \
+    'appid=%s&' \
+    'units=imperial&'
 
 ICONS_FILE = displayio.OnDiskBitmap('weather-icons.bmp')
-ICON_DIM = (16, 16) # width x height
-ICON_MAP = {  # map the openweathermap code to the icon location
+ICON_DIM   = (16, 16) # width x height
+ICON_MAP   = {  # map the openweathermap code to the icon location
     '01d': (0, 0), '01n': (1, 0),
     '02d': (0, 1), '02n': (1, 1),
     '03d': (0, 2), '03n': (1, 2),
@@ -116,8 +124,12 @@ ICON_MAP = {  # map the openweathermap code to the icon location
     '13d': (0, 7), '13n': (1, 7),
     '50d': (0, 8), '50n': (1, 8),
 }
-SPRITE = displayio.TileGrid(ICONS_FILE, pixel_shader=ICONS_FILE.pixel_shader,
-    tile_width = ICON_DIM[0], tile_height = ICON_DIM[1])
+SPRITE = displayio.TileGrid(
+    ICONS_FILE,
+    pixel_shader = ICONS_FILE.pixel_shader,
+    tile_width   = ICON_DIM[0],
+    tile_height  = ICON_DIM[1]
+)
 
 def get_sprite(icon):
     (col, row) = ICON_MAP[icon]
@@ -207,7 +219,7 @@ def b13_bus():
     b13 = bus_api('GATES AV/GRANDVIEW AV', dir=0)
     times['B'].text = "\n".join(b13)
 
-def weather_card():
+def wthr_card():
     icon, temp = weather_api(secrets['coords'])
     weather['icon'].pop()
     weather['icon'].append(get_sprite(icon))
@@ -221,20 +233,21 @@ def rate_limit(name, source, rate, last):
     else:
         return last
 
-errors = 0
-train_last = bus_last = clock_last = weather_last = None
 network.get_local_time()
+clock_last = time.monotonic()
+train_last = bus_last = wthr_last = None
+errors = 0
 
 while True:
     try:
         now = datetime.now()
         clock['time'].text = "%02d:%02d" % (now.hour, now.minute)
 
-        clock_last   = rate_limit("clock", clock_time, TIME_LIMIT, clock_last)
-        train_last   = rate_limit("m_train", m_train, TRAIN_LIMIT, train_last)
-        train_last   = rate_limit("l_train", l_train, TRAIN_LIMIT, train_last)
-        bus_last     = rate_limit("b13_bus", b13_bus, BUS_LIMIT, bus_last)
-        weather_last = rate_limit("weather", weather_card, WEATHER_LIMIT, weather_last)
+        clock_last = rate_limit("clock", clock_time, TIME_LIMIT, clock_last)
+        train_last = rate_limit("m_train", m_train, TRAIN_LIMIT, train_last)
+        train_last = rate_limit("l_train", l_train, TRAIN_LIMIT, train_last)
+        bus_last   = rate_limit("b13_bus", b13_bus, BUS_LIMIT, bus_last)
+        wthr_last  = rate_limit("weather", wthr_card, WEATHER_LIMIT, wthr_last)
 
     except Exception as e:
         print("\nError: ", e)
