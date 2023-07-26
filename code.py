@@ -12,6 +12,7 @@ from adafruit_matrixportal.network import Network
 from board import NEOPIXEL
 from secrets import secrets
 
+
 ERROR_THRESHOLD    = 3     # before resetting the microcontroller
 REFRESH_RATE       = 10    # time (s) between refreshing the counts
 TRAIN_LIMIT        = 0     # no rate limit on the train API
@@ -40,6 +41,7 @@ matrix           = Matrix()
 display          = matrix.display
 display.rotation = 270
 network          = Network(status_neopixel=NEOPIXEL, debug=False)
+
 
 
 ### Trains API setup
@@ -153,7 +155,7 @@ root_group    = displayio.Group()
 clock_group   = displayio.Group(x=0, y=1)
 headers_group = displayio.Group(x=4, y=13)
 times_group   = displayio.Group(x=0, y=26)
-weather_group = displayio.Group(x=1, y=48)
+weather_group = displayio.Group(x=1, y=47)
 
 clock = {
     'time': label.Label(FONT['helvB10'], color=WHITE, x=3, y=4, text="00:00"),
@@ -201,6 +203,8 @@ root_group.append(headers_group);
 root_group.append(times_group);
 root_group.append(weather_group);
 
+
+
 display.show(root_group)
 
 
@@ -227,11 +231,15 @@ def wthr_card():
 
 def rate_limit(name, source, rate, last):
     if last == None or time.monotonic() - last >= rate:
-        source()
+        try:
+            source()
+        except Exception as e:
+            traceback.print_exception(e)
         gc.collect()
         return time.monotonic() 
     else:
         return last
+
 
 network.get_local_time()
 clock_last = time.monotonic()
@@ -249,12 +257,15 @@ while True:
         bus_last   = rate_limit("b13_bus", b13_bus, BUS_LIMIT, bus_last)
         wthr_last  = rate_limit("weather", wthr_card, WEATHER_LIMIT, wthr_last)
 
+    except MemoryError as e:
+        print("\nMemoryError: ", e)
+        traceback.print_exception(e)
     except Exception as e:
         print("\nError: ", e)
         traceback.print_exception(e)
         errors += 1
-        if errors > ERROR_THRESHOLD:
-            microcontroller.reset()
+#        if errors > ERROR_THRESHOLD:
+#            microcontroller.reset()
 
     gc.collect()
     print("Memory:\t\t%s" % (gc.mem_free()))
