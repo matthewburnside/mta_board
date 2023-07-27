@@ -156,10 +156,10 @@ def weather_api(coords):
 # GRAPHICS SETUP ###############################################################
 
 root_group    = displayio.Group()
-clock_group   = displayio.Group(x=0, y=1)
+clock_group   = displayio.Group(x=0, y=2)
 headers_group = displayio.Group(x=4, y=13)
 times_group   = displayio.Group(x=0, y=26)
-weather_group = displayio.Group(x=1, y=47)
+weather_group = displayio.Group(x=0, y=47)
 
 clock = {
     'time': label.Label(FONT['helvB10'], color=WHITE, x=3, y=4, text="00:00"),
@@ -191,7 +191,7 @@ weather = {
     'temp':   label.Label(FONT['helvB10'], color=WHITE, x=17, y=7, text="00"),
     'degree': circle.Circle(outline=WHITE, fill=BLACK, x0=29, y0=3, r=1),
 }
-weather['icon'].append(get_sprite('01n'))
+weather['icon'].append(get_sprite('01d'))
 
 for item in headers:
     headers_group.append(item)
