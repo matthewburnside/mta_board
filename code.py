@@ -22,7 +22,7 @@ WEATHER_LIMIT      = 600   # refresh the weather every 10 mins
 MAX_ENTRIES        = 3     # count of arrivals to show
 
 MONTH = ['','Jan','Feb','Mar','Apr','May','Jun',
-    'Jul','Aug','Sep','Oct','Nov','Dec']
+            'Jul','Aug','Sep','Oct','Nov','Dec']
 
 WHITE  = 0x666666
 ORANGE = 0xff6319
@@ -32,9 +32,9 @@ GOLD   = 0xDD8000
 BLACK  = 0x000000
 
 FONT = {
+    'thumb':   bitmap_font.load_font("fonts/tom-thumb.bdf"),
     '5x7':     bitmap_font.load_font("fonts/5x7.bdf"),
     'helvB10': bitmap_font.load_font("fonts/helvB10.bdf"),
-    'thumb':   bitmap_font.load_font("fonts/tom-thumb.bdf"),
 }
 
 matrix           = Matrix()
@@ -44,11 +44,12 @@ network          = Network(status_neopixel=NEOPIXEL, debug=False)
 
 
 
-### Trains API setup
+# TRAINS API SETUP #############################################################
 
 TRAIN_API = 'https://api.wheresthefuckingtrain.com/by-id/'
 STATION = {
-    'Forest Av': '934a',
+    # Get from github.com/jonthornton/MTAPI/blob/master/data/stations.json
+    'Forest Av':            '934a',
     'Myrtle - Wyckoff Avs': 'f145'
 }
 
@@ -63,9 +64,10 @@ def train_api(station, route, dir):
         for train in trains:
             arrivals.append(in_mins(now, train['time']))
     arrivals.sort()
+    arrivals = arrivals[:MAX_ENTRIES]
     arrivals = ["Ar" if i < 1 else str(i) for i in arrivals]
-    print("%s %s %s: %s" % (station, route, dir, arrivals))
-    return arrivals[:MAX_ENTRIES]
+    print("train: %s %s %s: %s" % (station, route, dir, arrivals))
+    return arrivals
 
 def in_mins(now, date_str):
     train_date = datetime.fromisoformat(date_str).replace(tzinfo=None)
@@ -73,7 +75,7 @@ def in_mins(now, date_str):
 
 
 
-### Buses API setup
+# BUSES API SETUP ##############################################################
 
 BUS_API = 'https://bustime.mta.info/api/siri/stop-monitoring.json?' \
     'key=%s&' \
@@ -96,16 +98,17 @@ def bus_api(stop, dir):
     for j in journeys:
         stops.append(j['MonitoredVehicleJourney']['MonitoredCall'] \
             ['Extensions']['Distances']['StopsFromCall'])
-
-    print("%s %s %s" % (stop, dir, stops))
-    stops.sort()
-    stops = [str(i) for i in stops]
     del schedule
-    return stops[:MAX_ENTRIES]
+
+    stops.sort()
+    stops = stops[:MAX_ENTRIES]
+    stops = [str(i) for i in stops]
+    print("bus: %s %s %s" % (stop, dir, stops))
+    return stops # [:MAX_ENTRIES]
 
 
 
-### Weather API setup
+# WEATHER API SETUP ############################################################
 
 WEATHER_API = 'https://api.openweathermap.org/data/2.5/weather?' \
     'lat=%s&' \
@@ -145,11 +148,12 @@ def weather_api(coords):
     resp = network.fetch_data(query, json_path=([]))
     icon = resp['weather'][0]['icon']
     temp = round(resp['main']['temp'])
-    print("icon: %s, temp: %s" % (icon, temp))
+    print("weather: icon: %s, temp: %s" % (icon, temp))
     return (icon, temp)
 
 
-### Graphics setup
+
+# GRAPHICS SETUP ###############################################################
 
 root_group    = displayio.Group()
 clock_group   = displayio.Group(x=0, y=1)
@@ -203,10 +207,11 @@ root_group.append(headers_group);
 root_group.append(times_group);
 root_group.append(weather_group);
 
-
-
 display.show(root_group)
 
+
+
+# API HANDLERS #################################################################
 
 def clock_time():
     network.get_local_time()
@@ -232,14 +237,19 @@ def wthr_card():
 def rate_limit(name, source, rate, last):
     if last == None or time.monotonic() - last >= rate:
         try:
+            print(name)
             source()
         except Exception as e:
+            print("Error in %s: " % (name))
             traceback.print_exception(e)
         gc.collect()
         return time.monotonic() 
     else:
         return last
 
+
+
+# MAIN LOOP ####################################################################
 
 network.get_local_time()
 clock_last = time.monotonic()
@@ -264,10 +274,14 @@ while True:
         print("\nError: ", e)
         traceback.print_exception(e)
         errors += 1
+
+# TODO: Decide what error pattern should indicate a restart.  This one,
+#   which I borrowed from github.com/alejandrorascovan's code will reboot
+#   the system continually if one of the APIs goes down.
+#
 #        if errors > ERROR_THRESHOLD:
 #            microcontroller.reset()
 
-    gc.collect()
-    print("Memory:\t\t%s" % (gc.mem_free()))
+    print("mem_free: %s" % (gc.mem_free()))
     time.sleep(REFRESH_RATE);
 
