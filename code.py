@@ -1,5 +1,6 @@
 import displayio
 import gc
+import json
 import microcontroller
 import time
 import traceback
@@ -16,9 +17,9 @@ from secrets import secrets
 ERROR_THRESHOLD    = 3     # before resetting the microcontroller
 REFRESH_RATE       = 10    # time (s) between refreshing the counts
 TRAIN_LIMIT        = 0     # no rate limit on the train API
-BUS_LIMIT          = 45    # refresh the bus every 31s (there's a 30s rate limit)
+BUS_LIMIT          = 45    # refresh the bus every 45s (30s rate limit)
 TIME_LIMIT         = 600   # resync the clock every 10 mins
-WEATHER_LIMIT      = 600   # refresh the weather every 10 mins
+WEATHER_LIMIT      = 60    # refresh the weather every 1 min
 MAX_ENTRIES        = 3     # count of arrivals to show
 
 MONTH = ['','Jan','Feb','Mar','Apr','May','Jun',
@@ -37,88 +38,102 @@ FONT = {
     'helvB10': bitmap_font.load_font("fonts/helvB10.bdf"),
 }
 
-matrix           = Matrix()
-display          = matrix.display
+display          = Matrix().display
 display.rotation = 270
 network          = Network(status_neopixel=NEOPIXEL, debug=False)
 
 
 
-# TRAINS API SETUP #############################################################
+# UTILITIES ####################################################################
+
+# Returns a generator of all values for key in input
+def json_find(input, key):
+    if isinstance(input, dict):
+        for k, v in input.items():
+            if k == key:
+                yield v
+            else:
+                yield from json_find(v, key)
+    elif isinstance(input, list):
+        for item in input:
+            yield from json_find(item, key)
+
+# Returns the time difference in minutes between arrival and now
+def in_mins(now, arrival):
+    delta = datetime.fromisoformat(arrival).replace(tzinfo = None)
+    return round((delta - now).total_seconds() / 60.0)
+
+
+
+# MTA SUBWAY API ###############################################################
 
 TRAIN_API = 'https://api.wheresthefuckingtrain.com/by-id/'
 STATION = {
-    # Get from github.com/jonthornton/MTAPI/blob/master/data/stations.json
+    # From github.com/jonthornton/MTAPI/blob/master/data/stations.json
     'Forest Av':            '934a',
     'Myrtle - Wyckoff Avs': 'f145'
 }
 
 def train_api(station, route, dir):
-    query = '%s%s'% (TRAIN_API, STATION[station])
+    query    = '%s%s'% (TRAIN_API, STATION[station])
     schedule = network.fetch_data(query, json_path=(["data"],))
     arrivals = []
-    now = datetime.now()
-    for entry in schedule:
-        trains = entry[dir] # only trains in our dir
-        trains = [t for t in trains if t['route'] == route] # only our line
-        for train in trains:
-            arrivals.append(in_mins(now, train['time']))
-    arrivals.sort()
+    now      = datetime.now()
+
+    for trains in json_find(schedule, dir):
+        for train in (t for t in trains if t['route'] == route):
+            mins = in_mins(now, train['time']) 
+            arrivals.append('Ar' if mins < 1 else mins)
+
     arrivals = arrivals[:MAX_ENTRIES]
-    arrivals = ["Ar" if i < 1 else str(i) for i in arrivals]
     print("train: %s %s %s: %s" % (station, route, dir, arrivals))
-    return arrivals
-
-def in_mins(now, date_str):
-    train_date = datetime.fromisoformat(date_str).replace(tzinfo=None)
-    return round((train_date-now).total_seconds()/60.0)
+    return map(str, arrivals)
 
 
 
-# BUSES API SETUP ##############################################################
+# MTA BUS API ##################################################################
 
-BUS_API = 'https://bustime.mta.info/api/siri/stop-monitoring.json?' \
-    'key=%s&' \
-    'MonitoringRef=%s&' \
-    'DirectionRef=%s&' \
-    'MaximumStopVisits=%s&' \
-    'StopMonitoringDetailLevel=minimum'
+BUS_API = \
+    'https://bustime.mta.info/api/siri/stop-monitoring.json' \
+    '?version=2' \
+    '&StopMonitoringDetailLevel=minimum' \
+    '&key=%s' \
+    '&MonitoringRef=%s' \
+    '&DirectionRef=%s' \
+    '&MaximumStopVisits=%s' \
 
 STOP = {
+    # Find station codes at https://bustime.mta.info
     'GATES AV/GRANDVIEW AV': '504111',
 }
 
 def bus_api(stop, dir):
-    query = BUS_API % (secrets['bustime_key'], STOP[stop], dir, MAX_ENTRIES)
-    gc.collect()
+    query    = BUS_API % (secrets['bustime_key'], STOP[stop], dir, MAX_ENTRIES)
     schedule = network.fetch_data(query, json_path=(["Siri"],))
-    journeys = schedule['ServiceDelivery']['StopMonitoringDelivery'] \
-        [0]['MonitoredStopVisit']
-    stops = []
-    for j in journeys:
-        stops.append(j['MonitoredVehicleJourney']['MonitoredCall'] \
-            ['Extensions']['Distances']['StopsFromCall'])
-    del schedule
+    arrivals = []
 
-    stops.sort()
-    stops = stops[:MAX_ENTRIES]
-    stops = [str(i) for i in stops]
-    print("bus: %s %s %s" % (stop, dir, stops))
-    return stops # [:MAX_ENTRIES]
+    for bus in json_find(schedule, 'ExpectedArrivalTime'):
+        mins = in_mins(now, bus)
+        arrivals.append('ar' if mins < 1 else mins)
+
+    arrivals = arrivals[:MAX_ENTRIES]
+    print("bus: %s %s %s" % (stop, dir, arrivals))
+    return map(str, arrivals)
 
 
 
 # WEATHER API SETUP ############################################################
 
-WEATHER_API = 'https://api.openweathermap.org/data/2.5/weather?' \
-    'lat=%s&' \
-    'lon=%s&' \
-    'appid=%s&' \
-    'units=imperial&'
+WEATHER_API = \
+    'https://api.openweathermap.org/data/2.5/weather' \
+    '?lat=%s' \
+    '&lon=%s' \
+    '&appid=%s' \
+    '&units=imperial'
 
 ICONS_FILE = displayio.OnDiskBitmap('weather-icons.bmp')
 ICON_DIM   = (16, 16) # width x height
-ICON_MAP   = {  # map the openweathermap code to the icon location
+ICON_MAP   = {  # map the openweathermap code to its grid location
     '01d': (0, 0), '01n': (1, 0),
     '02d': (0, 1), '02n': (1, 1),
     '03d': (0, 2), '03n': (1, 2),
@@ -129,7 +144,7 @@ ICON_MAP   = {  # map the openweathermap code to the icon location
     '13d': (0, 7), '13n': (1, 7),
     '50d': (0, 8), '50n': (1, 8),
 }
-SPRITE = displayio.TileGrid(
+SPRITE     = displayio.TileGrid(
     ICONS_FILE,
     pixel_shader = ICONS_FILE.pixel_shader,
     tile_width   = ICON_DIM[0],
@@ -156,10 +171,10 @@ def weather_api(coords):
 # GRAPHICS SETUP ###############################################################
 
 root_group    = displayio.Group()
-clock_group   = displayio.Group(x=0, y=1)
+clock_group   = displayio.Group(x=0, y=2)
 headers_group = displayio.Group(x=4, y=13)
 times_group   = displayio.Group(x=0, y=26)
-weather_group = displayio.Group(x=1, y=47)
+weather_group = displayio.Group(x=0, y=47)
 
 clock = {
     'time': label.Label(FONT['helvB10'], color=WHITE, x=3, y=4, text="00:00"),
@@ -191,7 +206,7 @@ weather = {
     'temp':   label.Label(FONT['helvB10'], color=WHITE, x=17, y=7, text="00"),
     'degree': circle.Circle(outline=WHITE, fill=BLACK, x0=29, y0=3, r=1),
 }
-weather['icon'].append(get_sprite('01n'))
+weather['icon'].append(get_sprite('01d'))
 
 for item in headers:
     headers_group.append(item)
@@ -236,13 +251,13 @@ def wthr_card():
 
 def rate_limit(name, source, rate, last):
     if last == None or time.monotonic() - last >= rate:
+        gc.collect()
         try:
             print(name)
             source()
         except Exception as e:
             print("Error in %s: " % (name))
             traceback.print_exception(e)
-        gc.collect()
         return time.monotonic() 
     else:
         return last
@@ -274,13 +289,7 @@ while True:
         print("\nError: ", e)
         traceback.print_exception(e)
         errors += 1
-
-# TODO: Decide what error pattern should indicate a restart.  This one,
-#   which I borrowed from github.com/alejandrorascovan's code will reboot
-#   the system continually if one of the APIs goes down.
-#
-#        if errors > ERROR_THRESHOLD:
-#            microcontroller.reset()
+        print("\nTotal errors: ", errors)
 
     print("mem_free: %s" % (gc.mem_free()))
     time.sleep(REFRESH_RATE);
