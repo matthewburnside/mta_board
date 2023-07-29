@@ -20,7 +20,7 @@ TRAIN_LIMIT        = 0     # no rate limit on the train API
 BUS_LIMIT          = 45    # refresh the bus every 45s (30s rate limit)
 TIME_LIMIT         = 600   # resync the clock every 10 mins
 WEATHER_LIMIT      = 60    # refresh the weather every 1 min
-MAX_ENTRIES        = 3     # count of arrivals to show
+MAX_T              = 3     # count of arrivals to show
 
 MONTH = ['','Jan','Feb','Mar','Apr','May','Jun',
             'Jul','Aug','Sep','Oct','Nov','Dec']
@@ -58,82 +58,18 @@ def json_find(input, key):
         for item in input:
             yield from json_find(item, key)
 
-# Returns the time difference in minutes between arrival and now
+# Returns the time diff in minutes between arrival and now
 def in_mins(now, arrival):
     delta = datetime.fromisoformat(arrival).replace(tzinfo = None)
     return round((delta - now).total_seconds() / 60.0)
 
 
 
-# MTA SUBWAY API ###############################################################
-
-TRAIN_API = 'https://api.wheresthefuckingtrain.com/by-id/'
-STATION = {
-    # From github.com/jonthornton/MTAPI/blob/master/data/stations.json
-    'Forest Av':            '934a',
-    'Myrtle - Wyckoff Avs': 'f145'
-}
-
-def train_api(station, route, dir):
-    query    = '%s%s'% (TRAIN_API, STATION[station])
-    schedule = network.fetch_data(query, json_path=(["data"],))
-    arrivals = []
-    now      = datetime.now()
-
-    for trains in json_find(schedule, dir):
-        for train in (t for t in trains if t['route'] == route):
-            mins = in_mins(now, train['time']) 
-            arrivals.append('Ar' if mins < 1 else mins)
-
-    arrivals = arrivals[:MAX_ENTRIES]
-    print("train: %s %s %s: %s" % (station, route, dir, arrivals))
-    return map(str, arrivals)
-
-
-
-# MTA BUS API ##################################################################
-
-BUS_API = \
-    'https://bustime.mta.info/api/siri/stop-monitoring.json' \
-    '?version=2' \
-    '&StopMonitoringDetailLevel=minimum' \
-    '&key=%s' \
-    '&MonitoringRef=%s' \
-    '&DirectionRef=%s' \
-    '&MaximumStopVisits=%s' \
-
-STOP = {
-    # Find station codes at https://bustime.mta.info
-    'GATES AV/GRANDVIEW AV': '504111',
-}
-
-def bus_api(stop, dir):
-    query    = BUS_API % (secrets['bustime_key'], STOP[stop], dir, MAX_ENTRIES)
-    schedule = network.fetch_data(query, json_path=(["Siri"],))
-    arrivals = []
-
-    for bus in json_find(schedule, 'ExpectedArrivalTime'):
-        mins = in_mins(now, bus)
-        arrivals.append('ar' if mins < 1 else mins)
-
-    arrivals = arrivals[:MAX_ENTRIES]
-    print("bus: %s %s %s" % (stop, dir, arrivals))
-    return map(str, arrivals)
-
-
-
-# WEATHER API SETUP ############################################################
-
-WEATHER_API = \
-    'https://api.openweathermap.org/data/2.5/weather' \
-    '?lat=%s' \
-    '&lon=%s' \
-    '&appid=%s' \
-    '&units=imperial'
+# GRAPHICS SETUP ###############################################################
 
 ICONS_FILE = displayio.OnDiskBitmap('weather-icons.bmp')
 ICON_DIM   = (16, 16) # width x height
-ICON_MAP   = {  # map the openweathermap code to its grid location
+ICON_MAP   = {  # map openweathermap icon codes to their loc in the bmp
     '01d': (0, 0), '01n': (1, 0),
     '02d': (0, 1), '02n': (1, 1),
     '03d': (0, 2), '03n': (1, 2),
@@ -151,24 +87,12 @@ SPRITE     = displayio.TileGrid(
     tile_height  = ICON_DIM[1]
 )
 
-def get_sprite(icon):
-    (col, row) = ICON_MAP[icon]
+def get_icon(icon_code):
+    (col, row) = ICON_MAP[icon_code]
     if len(weather['icon']) > 0:
         weather['icon'].pop()
     SPRITE[0] = (row * 2) + col
     return SPRITE    
-
-def weather_api(coords):
-    query = WEATHER_API % (coords['lat'], coords['lon'], secrets['weather_key'])
-    resp = network.fetch_data(query, json_path=([]))
-    icon = resp['weather'][0]['icon']
-    temp = round(resp['main']['temp'])
-    print("weather: icon: %s, temp: %s" % (icon, temp))
-    return (icon, temp)
-
-
-
-# GRAPHICS SETUP ###############################################################
 
 root_group    = displayio.Group()
 clock_group   = displayio.Group(x=0, y=2)
@@ -206,7 +130,7 @@ weather = {
     'temp':   label.Label(FONT['helvB10'], color=WHITE, x=17, y=7, text="00"),
     'degree': circle.Circle(outline=WHITE, fill=BLACK, x0=29, y0=3, r=1),
 }
-weather['icon'].append(get_sprite('01d'))
+weather['icon'].append(get_icon('01d'))
 
 for item in headers:
     headers_group.append(item)
@@ -226,31 +150,108 @@ display.show(root_group)
 
 
 
+# MTA SUBWAY API ###############################################################
+
+TRAIN_API = 'https://api.wheresthefuckingtrain.com/by-id/'
+STATION = {
+    # Find these codes at:
+    #     github.com/jonthornton/MTAPI/blob/master/data/stations.json
+    'Forest Av':            '934a',
+    'Myrtle - Wyckoff Avs': 'f145'
+}
+
+def train_api(station, route, dir):
+    query    = '%s%s'% (TRAIN_API, STATION[station])
+    schedule = network.fetch_data(query, json_path=(["data"],))
+    now      = datetime.now()
+
+    for trains in json_find(schedule, dir):
+        for train in (t for t in trains if t['route'] == route):
+            mins = in_mins(now, train['time']) 
+            yield 'Ar' if mins < 1 else str(mins)
+
+
+
+# MTA BUS API ##################################################################
+
+BUS_API = \
+    'https://bustime.mta.info/api/siri/stop-monitoring.json' \
+    '?version=2' \
+    '&StopMonitoringDetailLevel=minimum' \
+    '&key=%s' \
+    '&MonitoringRef=%s' \
+    '&DirectionRef=%s' \
+    '&MaximumStopVisits=%s' \
+
+STOP = {
+    # Find these codes at:
+    #     https://bustime.mta.info
+    'GATES AV/GRANDVIEW AV': '504111',
+}
+
+def bus_api(stop, dir):
+    query    = BUS_API % (secrets['bustime_key'], STOP[stop], dir, MAX_T)
+    schedule = network.fetch_data(query, json_path=(["Siri"],))
+    now      = datetime.now()
+
+    for bus in json_find(schedule, 'ExpectedArrivalTime'):
+        mins = in_mins(now, bus)
+        yield 'Ar' if mins < 1 else str(mins)
+
+
+
+# WEATHER API SETUP ############################################################
+
+WEATHER_API = \
+    'https://api.openweathermap.org/data/2.5/weather' \
+    '?lat=%s' \
+    '&lon=%s' \
+    '&appid=%s' \
+    '&units=imperial'
+
+
+def weather_api(coords):
+    query = WEATHER_API % (coords['lat'], coords['lon'], secrets['weather_key'])
+    resp = network.fetch_data(query, json_path=([]))
+    icon = resp['weather'][0]['icon']
+    temp = round(resp['main']['temp'])
+    return (icon, temp)
+
+
+
 # API HANDLERS #################################################################
 
 def clock_time():
     network.get_local_time()
 
 def m_train():
-    m_train = train_api('Forest Av', route='M', dir='N')
-    times['M'].text = "\n".join(m_train)
+    arrivals = [] 
+    for train in zip(train_api('Forest Av', route='M', dir='N'), range(MAX_T)):
+        arrivals.append(train[0])   
+    times['M'].text = "\n".join(arrivals)
 
 def l_train():
-    l_train = train_api('Myrtle - Wyckoff Avs', route='L', dir='N')
-    times['L'].text = "\n".join(l_train)
+    arrivals = [] 
+    for train in zip(
+            train_api('Myrtle - Wyckoff Avs', route='L', dir='N'),
+            range(MAX_T)):
+        arrivals.append(train[0])   
+    times['L'].text = "\n".join(arrivals)
 
 def b13_bus():
-    b13 = bus_api('GATES AV/GRANDVIEW AV', dir=0)
-    times['B'].text = "\n".join(b13)
+    arrivals = [] 
+    for train in zip(bus_api('GATES AV/GRANDVIEW AV', dir=0), range(MAX_T)):
+        arrivals.append(train[0])   
+    times['B'].text = "\n".join(arrivals)
 
 def wthr_card():
-    icon, temp = weather_api(secrets['coords'])
+    icon_code, temp = weather_api(secrets['coords'])
     weather['icon'].pop()
-    weather['icon'].append(get_sprite(icon))
+    weather['icon'].append(get_icon(icon_code))
     weather['temp'].text = str(temp)
 
-# Only call source if at least rate seconds have passed since the last time we
-# called it.  Returns the last time we called.
+# Only call source if at least rate seconds have passed since the last
+# time we called it.  Returns the last time we called.
 def rate_limit(name, source, rate, last):
     if last == None or time.monotonic() - last >= rate:
         gc.collect()
