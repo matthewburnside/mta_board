@@ -282,14 +282,12 @@ while True:
 
     except Exception as e:
         err = type(e).__name__
-
         if err not in errors:
             errors[err] = 0
         errors[err] += 1
-
         traceback.print_exception(e)
-        print("\nErrors: ", errors)
 
     print("mem_free: %s" % (gc.mem_free()))
+    print("error_hist: ", errors)
     time.sleep(REFRESH_RATE);
 
