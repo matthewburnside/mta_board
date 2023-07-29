@@ -249,15 +249,13 @@ def wthr_card():
     weather['icon'].append(get_sprite(icon))
     weather['temp'].text = str(temp)
 
+# Only call source if at least rate seconds have passed since the last time we
+# called it.  Returns the last time we called.
 def rate_limit(name, source, rate, last):
     if last == None or time.monotonic() - last >= rate:
         gc.collect()
-        try:
-            print(name)
-            source()
-        except Exception as e:
-            print("Error in %s: " % (name))
-            traceback.print_exception(e)
+        print(name)
+        source()
         return time.monotonic() 
     else:
         return last
@@ -269,7 +267,7 @@ def rate_limit(name, source, rate, last):
 network.get_local_time()
 clock_last = time.monotonic()
 train_last = bus_last = wthr_last = None
-errors = 0
+errors = {} 
 
 while True:
     try:
@@ -282,14 +280,15 @@ while True:
         bus_last   = rate_limit("b13_bus", b13_bus, BUS_LIMIT, bus_last)
         wthr_last  = rate_limit("weather", wthr_card, WEATHER_LIMIT, wthr_last)
 
-    except MemoryError as e:
-        print("\nMemoryError: ", e)
-        traceback.print_exception(e)
     except Exception as e:
-        print("\nError: ", e)
+        err = type(e).__name__
+
+        if err not in errors:
+            errors[err] = 0
+        errors[err] += 1
+
         traceback.print_exception(e)
-        errors += 1
-        print("\nTotal errors: ", errors)
+        print("\nErrors: ", errors)
 
     print("mem_free: %s" % (gc.mem_free()))
     time.sleep(REFRESH_RATE);
