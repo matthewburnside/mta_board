@@ -1,6 +1,5 @@
 import displayio
 import gc
-import json
 import microcontroller
 import time
 import traceback
@@ -21,9 +20,6 @@ BUS_LIMIT          = 45    # refresh the bus every 45s (30s rate limit)
 TIME_LIMIT         = 600   # resync the clock every 10 mins
 WEATHER_LIMIT      = 60    # refresh the weather every 1 min
 MAX_T              = 3     # count of arrivals to show
-
-MONTH = ['','Jan','Feb','Mar','Apr','May','Jun',
-            'Jul','Aug','Sep','Oct','Nov','Dec']
 
 WHITE  = 0x666666
 ORANGE = 0xff6319
@@ -46,7 +42,7 @@ network          = Network(status_neopixel=NEOPIXEL, debug=False)
 
 # UTILITIES ####################################################################
 
-# Returns a generator of all values for key in input
+# Generates all values for key in input
 def json_find(input, key):
     if isinstance(input, dict):
         for k, v in input.items():
@@ -58,10 +54,10 @@ def json_find(input, key):
         for item in input:
             yield from json_find(item, key)
 
-# Returns the time diff in minutes between arrival and now
-def in_mins(now, arrival):
-    delta = datetime.fromisoformat(arrival).replace(tzinfo = None)
-    return round((delta - now).total_seconds() / 60.0)
+# Returns the difference in minutes between now and then
+def in_mins(now, then):
+    then_iso = datetime.fromisoformat(then).replace(tzinfo = None)
+    return round((then_iso - now).total_seconds() / 60.0)
 
 
 
@@ -89,8 +85,8 @@ SPRITE     = displayio.TileGrid(
 
 def get_icon(icon_code):
     (col, row) = ICON_MAP[icon_code]
-    if len(weather['icon']) > 0:
-        weather['icon'].pop()
+#    if len(weather['icon']) > 0:
+#        weather['icon'].pop()
     SPRITE[0] = (row * 2) + col
     return SPRITE    
 
