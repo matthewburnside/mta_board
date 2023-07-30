@@ -97,7 +97,7 @@ times_group   = displayio.Group(x=0, y=26)
 weather_group = displayio.Group(x=0, y=47)
 
 clock = {
-    'time': label.Label(FONT['helvB10'], color=WHITE, x=3, y=4, text="00:00"),
+    'time': label.Label(FONT['helvB10'], color=WHITE, x=3, y=4, text="--:--"),
 }
 
 headers = [
@@ -114,19 +114,19 @@ headers = [
 
 times = {
     'M': label.Label(FONT['5x7'], color=GOLD, x=0, y=0, \
-        text=" "*9, line_spacing=1.2),
+        text="--\n--\n--", line_spacing=1.2),
     'L': label.Label(FONT['5x7'], color=GOLD, x=12, y=0, \
-        text=" "*9, line_spacing=1.2),
+        text="--\n--\n--", line_spacing=1.2),
     'B': label.Label(FONT['5x7'], color=GOLD, x=23, y=0, \
-        text=" "*9, line_spacing=1.2),
+        text="--\n--\n--", line_spacing=1.2),
 }
 
 weather = {
     'icon':   displayio.Group(x=0, y=0),
-    'temp':   label.Label(FONT['helvB10'], color=WHITE, x=17, y=7, text="00"),
+    'temp':   label.Label(FONT['helvB10'], color=WHITE, x=17, y=7, text="--"),
     'degree': circle.Circle(outline=WHITE, fill=BLACK, x0=29, y0=3, r=1),
 }
-weather['icon'].append(get_icon('01d'))
+weather['icon'].append(get_icon('01n'))
 
 for item in headers:
     headers_group.append(item)
