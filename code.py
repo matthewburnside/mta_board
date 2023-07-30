@@ -85,8 +85,6 @@ SPRITE     = displayio.TileGrid(
 
 def get_icon(icon_code):
     (col, row) = ICON_MAP[icon_code]
-#    if len(weather['icon']) > 0:
-#        weather['icon'].pop()
     SPRITE[0] = (row * 2) + col
     return SPRITE    
 
@@ -216,6 +214,21 @@ def weather_api(coords):
 
 
 # API HANDLERS #################################################################
+errors = {
+    'clock':   {},
+    'm_train': {},
+    'l_train': {},
+    'b13_bus': {},
+    'weather': {},
+    'unknown': {},
+} 
+
+def error_log(exception, name):
+    err = type(exception).__name__
+    if err not in errors[name]:
+        errors[name][err] = 0
+    errors[name][err] += 1
+    traceback.print_exception(exception)
 
 def clock_time():
     network.get_local_time()
@@ -252,7 +265,10 @@ def rate_limit(name, source, rate, last):
     if last == None or time.monotonic() - last >= rate:
         gc.collect()
         print(name)
-        source()
+        try:
+            source()
+        except Exception as e:
+            error_log(e, name)
         return time.monotonic() 
     else:
         return last
@@ -264,7 +280,6 @@ def rate_limit(name, source, rate, last):
 network.get_local_time()
 clock_last = time.monotonic()
 train_last = bus_last = wthr_last = None
-errors = {} 
 
 while True:
     try:
@@ -278,11 +293,7 @@ while True:
         wthr_last  = rate_limit("weather", wthr_card, WEATHER_LIMIT, wthr_last)
 
     except Exception as e:
-        err = type(e).__name__
-        if err not in errors:
-            errors[err] = 0
-        errors[err] += 1
-        traceback.print_exception(e)
+        error_log(e, 'unknown')
 
     print("mem_free: %s" % (gc.mem_free()))
     print("error_hist: ", errors)
