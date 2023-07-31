@@ -13,12 +13,12 @@ from board import NEOPIXEL
 from secrets import secrets
 
 
-ERROR_THRESHOLD    = 3     # before resetting the microcontroller
 REFRESH_RATE       = 10    # time (s) between refreshing the counts
 TRAIN_LIMIT        = 0     # no rate limit on the train API
 BUS_LIMIT          = 45    # refresh the bus every 45s (30s rate limit)
 TIME_LIMIT         = 600   # resync the clock every 10 mins
 WEATHER_LIMIT      = 60    # refresh the weather every 1 min
+RESET_LIMIT        = 7200  # before resetting the microcontroller
 MAX_T              = 3     # count of arrivals to show
 
 WHITE  = 0x666666
@@ -227,8 +227,10 @@ def error_log(exception, name):
     err = type(exception).__name__
     if err not in errors[name]:
         errors[name][err] = 0
-    errors[name][err] += 1
-    traceback.print_exception(exception)
+    errors[name][err] += 1 
+#    if errors[name][err] > ERROR_THRESHOLD:
+#        microcontroller.reset()
+#    traceback.print_exception(exception)
 
 def clock_time():
     network.get_local_time()
@@ -259,6 +261,9 @@ def wthr_card():
     weather['icon'].append(get_icon(icon_code))
     weather['temp'].text = str(temp)
 
+def reset():
+    microcontroller.reset()
+
 # Only call source if at least rate seconds have passed since the last
 # time we called it.  Returns the last time we called.
 def rate_limit(name, source, rate, last):
@@ -278,7 +283,7 @@ def rate_limit(name, source, rate, last):
 # MAIN LOOP ####################################################################
 
 network.get_local_time()
-clock_last = time.monotonic()
+clock_last = reset_last = time.monotonic()
 train_last = bus_last = wthr_last = None
 
 while True:
@@ -291,6 +296,7 @@ while True:
         train_last = rate_limit("l_train", l_train, TRAIN_LIMIT, train_last)
         bus_last   = rate_limit("b13_bus", b13_bus, BUS_LIMIT, bus_last)
         wthr_last  = rate_limit("weather", wthr_card, WEATHER_LIMIT, wthr_last)
+        reset_last = rate_limit("reset",   reset, RESET_LIMIT, reset_last)
 
     except Exception as e:
         error_log(e, 'unknown')
