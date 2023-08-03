@@ -89,10 +89,13 @@ def get_icon(icon_code):
     return SPRITE    
 
 root_group    = displayio.Group()
-clock_group   = displayio.Group(x=0, y=2)
-headers_group = displayio.Group(x=4, y=13)
-times_group   = displayio.Group(x=0, y=26)
-weather_group = displayio.Group(x=0, y=47)
+clock_group   = displayio.Group(x=0, y=1)
+weather_group = displayio.Group(x=0, y=12)
+headers_group = displayio.Group(x=4, y=28)
+times_group   = displayio.Group(x=0, y=41)
+
+#headers_group = displayio.Group(x=4, y=13)
+#times_group   = displayio.Group(x=0, y=26)
 
 clock = {
     'time': label.Label(FONT['helvB10'], color=WHITE, x=3, y=4, text="--:--"),
@@ -124,7 +127,7 @@ weather = {
     'temp':   label.Label(FONT['helvB10'], color=WHITE, x=17, y=7, text="--"),
     'degree': circle.Circle(outline=WHITE, fill=BLACK, x0=29, y0=3, r=1),
 }
-weather['icon'].append(get_icon('01n'))
+weather['icon'].append(get_icon('01d'))
 
 for item in headers:
     headers_group.append(item)
@@ -184,10 +187,16 @@ STOP = {
 }
 
 def bus_api(stop, dir):
-    query    = BUS_API % (secrets['bustime_key'], STOP[stop], dir, MAX_T)
-    schedule = network.fetch_data(query, json_path=(["Siri"],))
-    now      = datetime.now()
+    query = BUS_API % (secrets['bustime_key'], STOP[stop], dir, MAX_T)
+    try:
+        schedule = network.fetch_data(query, json_path=(["Siri"],))
+    except MemoryError as e:
+        # The bus api is quite verbose.  Sometimes the replies are too big.
+        for _ in range(MAX_T):
+            yield 'xx'
+        return
 
+    now = datetime.now()
     for bus in json_find(schedule, 'ExpectedArrivalTime'):
         mins = in_mins(now, bus)
         yield 'Ar' if mins < 1 else str(mins)
@@ -228,9 +237,7 @@ def error_log(exception, name):
     if err not in errors[name]:
         errors[name][err] = 0
     errors[name][err] += 1 
-#    if errors[name][err] > ERROR_THRESHOLD:
-#        microcontroller.reset()
-#    traceback.print_exception(exception)
+    traceback.print_exception(exception)
 
 def clock_time():
     network.get_local_time()
