@@ -1,6 +1,6 @@
 # MTA Board
 
-Displays a departure dashboard for MTA subways and buses along with time and current weather conditions.
+Displays a departure dashboard for MTA subways and buses along with current time and weather conditions.
 
 <img src="IMG_7552.jpg" width="400">
 
