@@ -265,6 +265,8 @@ def wthr_card():
     weather['icon'].append(get_icon(icon_code))
     weather['temp'].text = str(temp)
 
+# CircuitPython runs out of sockets after running for a while.  Just reset it
+# occasionally until I debug the issue. 
 def reset():
     microcontroller.reset()
 
