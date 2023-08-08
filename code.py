@@ -13,13 +13,13 @@ from board import NEOPIXEL
 from secrets import secrets
 
 
-REFRESH_RATE       = 10    # time (s) between refreshing the counts
+REFRESH_RATE       = 10    # interval (s) between refreshing the counts
 TRAIN_LIMIT        = 0     # no rate limit on the train API
 BUS_LIMIT          = 45    # refresh the bus every 45s (30s rate limit)
-TIME_LIMIT         = 600   # resync the clock every 10 mins
+TIME_LIMIT         = 600   # refresh the clock every 10 mins
 WEATHER_LIMIT      = 60    # refresh the weather every 1 min
-RESET_LIMIT        = 7200  # before resetting the microcontroller
-MAX_T              = 3     # count of arrivals to show
+RESET_LIMIT        = 7200  # reset the microcontroller every 2 hrs
+MAX_T              = 3     # count of arrivals to display
 
 WHITE  = 0x666666
 ORANGE = 0xff6319
@@ -65,7 +65,7 @@ def in_mins(now, then):
 
 ICONS_FILE = displayio.OnDiskBitmap('weather-icons.bmp')
 ICON_DIM   = (16, 16) # width x height
-ICON_MAP   = {  # map openweathermap icon codes to their loc in the bmp
+ICON_MAP   = {  # map openweathermap icon codes to their x,y in the bitmap
     '01d': (0, 0), '01n': (1, 0),
     '02d': (0, 1), '02n': (1, 1),
     '03d': (0, 2), '03n': (1, 2),
@@ -93,9 +93,6 @@ clock_group   = displayio.Group(x=0, y=1)
 weather_group = displayio.Group(x=0, y=12)
 headers_group = displayio.Group(x=4, y=28)
 times_group   = displayio.Group(x=0, y=41)
-
-#headers_group = displayio.Group(x=4, y=13)
-#times_group   = displayio.Group(x=0, y=26)
 
 clock = {
     'time': label.Label(FONT['helvB10'], color=WHITE, x=3, y=4, text="--:--"),
@@ -127,7 +124,7 @@ weather = {
     'temp':   label.Label(FONT['helvB10'], color=WHITE, x=17, y=7, text="--"),
     'degree': circle.Circle(outline=WHITE, fill=BLACK, x0=29, y0=3, r=1),
 }
-weather['icon'].append(get_icon('01d'))
+weather['icon'].append(get_icon('01n'))
 
 for item in headers:
     headers_group.append(item)
@@ -151,7 +148,7 @@ display.show(root_group)
 
 TRAIN_API = 'https://api.wheresthefuckingtrain.com/by-id/'
 STATION = {
-    # Find these codes at:
+    # These codes are from
     #     github.com/jonthornton/MTAPI/blob/master/data/stations.json
     'Forest Av':            '934a',
     'Myrtle - Wyckoff Avs': 'f145'
@@ -181,8 +178,7 @@ BUS_API = \
     '&MaximumStopVisits=%s' \
 
 STOP = {
-    # Find these codes at:
-    #     https://bustime.mta.info
+    # These codes are from bustime.mta.info
     'GATES AV/GRANDVIEW AV': '504111',
 }
 
@@ -191,7 +187,8 @@ def bus_api(stop, dir):
     try:
         schedule = network.fetch_data(query, json_path=(["Siri"],))
     except MemoryError as e:
-        # The bus api is quite verbose.  Sometimes the replies are too big.
+        # The bus api is quite verbose.  Sometimes the replies are too big
+        # and the M4 runs out of memory.
         for _ in range(MAX_T):
             yield 'xx'
         return
