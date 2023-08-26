@@ -150,8 +150,8 @@ TRAIN_API = 'https://api.wheresthefuckingtrain.com/by-id/'
 STATION = {
     # These codes are from
     #     github.com/jonthornton/MTAPI/blob/master/data/stations.json
-    'Forest Av':            '934a',
-    'Myrtle - Wyckoff Avs': 'f145'
+    'Forest Av':            'M05',
+    'Myrtle - Wyckoff Avs': 'L17'
 }
 
 def train_api(station, route, dir):
