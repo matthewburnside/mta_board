@@ -189,6 +189,7 @@ def bus_api(stop, dir):
     except MemoryError as e:
         # The bus api is quite verbose.  Sometimes the replies are too big
         # and the M4 runs out of memory.
+        gc.collect()
         for _ in range(MAX_T):
             yield 'xx'
         return
